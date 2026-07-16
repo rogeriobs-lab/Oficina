@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Plus, Phone, User, X, Search } from 'lucide-react-native';
+import { Plus, Phone, User, X, Search, Pencil, StickyNote } from 'lucide-react-native';
 import { supabase, type Client } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
@@ -23,9 +23,11 @@ export default function ClientsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState('');
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -50,6 +52,24 @@ export default function ClientsScreen() {
     loadClients();
   }, [loadClients]);
 
+  const openAddModal = () => {
+    setEditingClient(null);
+    setFormName('');
+    setFormPhone('');
+    setFormNotes('');
+    setFormError(null);
+    setModalVisible(true);
+  };
+
+  const openEditModal = (client: Client) => {
+    setEditingClient(client);
+    setFormName(client.name);
+    setFormPhone(client.phone ?? '');
+    setFormNotes(client.notes ?? '');
+    setFormError(null);
+    setModalVisible(true);
+  };
+
   const handleSave = async () => {
     if (!formName.trim()) {
       setFormError('Informe o nome do cliente');
@@ -58,13 +78,22 @@ export default function ClientsScreen() {
     setSaving(true);
     setFormError(null);
     try {
-      const { error } = await supabase.from('clients').insert({
+      const payload = {
         name: formName.trim(),
         phone: formPhone.trim() || null,
-      });
-      if (error) throw error;
+        notes: formNotes.trim() || null,
+      };
+      if (editingClient) {
+        const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('clients').insert(payload);
+        if (error) throw error;
+      }
       setFormName('');
       setFormPhone('');
+      setFormNotes('');
+      setEditingClient(null);
       setModalVisible(false);
       loadClients();
     } catch (err) {
@@ -78,7 +107,9 @@ export default function ClientsScreen() {
     setModalVisible(false);
     setFormName('');
     setFormPhone('');
+    setFormNotes('');
     setFormError(null);
+    setEditingClient(null);
   };
 
   const filtered = clients.filter(
@@ -94,7 +125,7 @@ export default function ClientsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Clientes</Text>
-        <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
+        <Pressable style={styles.addButton} onPress={openAddModal}>
           <Plus size={20} color={theme.white} strokeWidth={2.5} />
           <Text style={styles.addButtonText}>Novo</Text>
         </Pressable>
@@ -133,7 +164,16 @@ export default function ClientsScreen() {
                       <Text style={styles.cardPhone}>{client.phone}</Text>
                     </View>
                   )}
+                  {client.notes && (
+                    <View style={styles.notesRow}>
+                      <StickyNote size={12} color={theme.textMuted} strokeWidth={2} />
+                      <Text style={styles.cardNotes} numberOfLines={2}>{client.notes}</Text>
+                    </View>
+                  )}
                 </View>
+                <Pressable style={styles.editBtn} onPress={() => openEditModal(client)} hitSlop={8}>
+                  <Pencil size={16} color={theme.textSecondary} strokeWidth={2} />
+                </Pressable>
               </View>
             ))}
           </View>
@@ -144,7 +184,7 @@ export default function ClientsScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Novo Cliente</Text>
+              <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo Cliente'}</Text>
               <Pressable onPress={closeModal} hitSlop={12}>
                 <X size={24} color={theme.textSecondary} strokeWidth={2} />
               </Pressable>
@@ -179,8 +219,22 @@ export default function ClientsScreen() {
               />
             </View>
 
+            <View style={styles.field}>
+              <Text style={styles.label}>Observações</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Notas sobre o cliente..."
+                placeholderTextColor={theme.textMuted}
+                value={formNotes}
+                onChangeText={setFormNotes}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
             <Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveButtonText}>{saving ? 'Salvando...' : 'Cadastrar'}</Text>
+              <Text style={styles.saveButtonText}>{saving ? 'Salvando...' : editingClient ? 'Salvar Alterações' : 'Cadastrar'}</Text>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -282,6 +336,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.textSecondary,
   },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 4,
+  },
+  cardNotes: {
+    fontSize: 12,
+    color: theme.textMuted,
+    flex: 1,
+  },
+  editBtn: {
+    padding: 8,
+    marginLeft: 4,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -333,6 +402,10 @@ const styles = StyleSheet.create({
     color: theme.text,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  textArea: {
+    minHeight: 80,
+    paddingTop: 12,
   },
   saveButton: {
     backgroundColor: theme.primary,

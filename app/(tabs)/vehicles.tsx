@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Plus, Car, User, X, Search, ChevronDown } from 'lucide-react-native';
+import { Plus, Car, User, X, Search, ChevronDown, Pencil, StickyNote } from 'lucide-react-native';
 import { supabase, type Vehicle, type Client } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
@@ -26,12 +26,14 @@ export default function VehiclesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState('');
+  const [editingVehicle, setEditingVehicle] = useState<VehicleRow | null>(null);
 
   const [formPlate, setFormPlate] = useState('');
   const [formBrand, setFormBrand] = useState('');
   const [formModel, setFormModel] = useState('');
   const [formYear, setFormYear] = useState('');
   const [formClientId, setFormClientId] = useState('');
+  const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
@@ -59,6 +61,32 @@ export default function VehiclesScreen() {
     loadData();
   }, [loadData]);
 
+  const openAddModal = () => {
+    setEditingVehicle(null);
+    setFormPlate('');
+    setFormBrand('');
+    setFormModel('');
+    setFormYear('');
+    setFormClientId('');
+    setFormNotes('');
+    setFormError(null);
+    setClientPickerVisible(false);
+    setModalVisible(true);
+  };
+
+  const openEditModal = (vehicle: VehicleRow) => {
+    setEditingVehicle(vehicle);
+    setFormPlate(vehicle.plate);
+    setFormBrand(vehicle.brand);
+    setFormModel(vehicle.model);
+    setFormYear(vehicle.year ? String(vehicle.year) : '');
+    setFormClientId(vehicle.client_id);
+    setFormNotes(vehicle.notes ?? '');
+    setFormError(null);
+    setClientPickerVisible(false);
+    setModalVisible(true);
+  };
+
   const handleSave = async () => {
     if (!formPlate.trim()) {
       setFormError('Informe a placa do veículo');
@@ -79,19 +107,28 @@ export default function VehiclesScreen() {
     setSaving(true);
     setFormError(null);
     try {
-      const { error } = await supabase.from('vehicles').insert({
+      const payload = {
         plate: formPlate.trim().toUpperCase(),
         brand: formBrand.trim(),
         model: formModel.trim(),
         year: formYear ? parseInt(formYear, 10) : null,
         client_id: formClientId,
-      });
-      if (error) throw error;
+        notes: formNotes.trim() || null,
+      };
+      if (editingVehicle) {
+        const { error } = await supabase.from('vehicles').update(payload).eq('id', editingVehicle.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('vehicles').insert(payload);
+        if (error) throw error;
+      }
       setFormPlate('');
       setFormBrand('');
       setFormModel('');
       setFormYear('');
       setFormClientId('');
+      setFormNotes('');
+      setEditingVehicle(null);
       setModalVisible(false);
       loadData();
     } catch (err) {
@@ -108,7 +145,10 @@ export default function VehiclesScreen() {
     setFormModel('');
     setFormYear('');
     setFormClientId('');
+    setFormNotes('');
     setFormError(null);
+    setEditingVehicle(null);
+    setClientPickerVisible(false);
   };
 
   const selectedClient = clients.find((c) => c.id === formClientId);
@@ -128,7 +168,7 @@ export default function VehiclesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Veículos</Text>
-        <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
+        <Pressable style={styles.addButton} onPress={openAddModal}>
           <Plus size={20} color={theme.white} strokeWidth={2.5} />
           <Text style={styles.addButtonText}>Novo</Text>
         </Pressable>
@@ -167,7 +207,16 @@ export default function VehiclesScreen() {
                     <User size={13} color={theme.textSecondary} strokeWidth={2} />
                     <Text style={styles.cardOwner}>{vehicle.clients?.name ?? '—'}</Text>
                   </View>
+                  {vehicle.notes && (
+                    <View style={styles.notesRow}>
+                      <StickyNote size={12} color={theme.textMuted} strokeWidth={2} />
+                      <Text style={styles.cardNotes} numberOfLines={2}>{vehicle.notes}</Text>
+                    </View>
+                  )}
                 </View>
+                <Pressable style={styles.editBtn} onPress={() => openEditModal(vehicle)} hitSlop={8}>
+                  <Pencil size={16} color={theme.textSecondary} strokeWidth={2} />
+                </Pressable>
               </View>
             ))}
           </View>
@@ -179,7 +228,7 @@ export default function VehiclesScreen() {
           <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Novo Veículo</Text>
+                <Text style={styles.modalTitle}>{editingVehicle ? 'Editar Veículo' : 'Novo Veículo'}</Text>
                 <Pressable onPress={closeModal} hitSlop={12}>
                   <X size={24} color={theme.textSecondary} strokeWidth={2} />
                 </Pressable>
@@ -279,8 +328,22 @@ export default function VehiclesScreen() {
                 )}
               </View>
 
+              <View style={styles.field}>
+                <Text style={styles.label}>Observações</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Notas sobre o veículo..."
+                  placeholderTextColor={theme.textMuted}
+                  value={formNotes}
+                  onChangeText={setFormNotes}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
               <Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
-                <Text style={styles.saveButtonText}>{saving ? 'Salvando...' : 'Cadastrar'}</Text>
+                <Text style={styles.saveButtonText}>{saving ? 'Salvando...' : editingVehicle ? 'Salvar Alterações' : 'Cadastrar'}</Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -349,6 +412,14 @@ const styles = StyleSheet.create({
   cardMain: { fontSize: 15, fontWeight: '600', color: theme.text, marginBottom: 3 },
   ownerRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardOwner: { fontSize: 13, color: theme.textSecondary },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 4,
+  },
+  cardNotes: { fontSize: 12, color: theme.textMuted, flex: 1 },
+  editBtn: { padding: 8, marginLeft: 4 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   modalScroll: { maxHeight: '95%' },
   modalContent: {
@@ -379,6 +450,10 @@ const styles = StyleSheet.create({
     color: theme.text,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  textArea: {
+    minHeight: 80,
+    paddingTop: 12,
   },
   selectButton: {
     flexDirection: 'row',

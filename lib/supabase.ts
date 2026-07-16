@@ -18,6 +18,7 @@ export type Client = {
   id: string;
   name: string;
   phone: string | null;
+  notes: string | null;
   user_id: string | null;
   created_at: string;
 };
@@ -29,6 +30,7 @@ export type Vehicle = {
   brand: string;
   model: string;
   year: number | null;
+  notes: string | null;
   created_at: string;
 };
 
