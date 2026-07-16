@@ -9,10 +9,9 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus, Search, ClipboardList, FileDown } from 'lucide-react-native';
+import { Plus, Search, ClipboardList } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { theme, formatCurrency, formatDate } from '@/lib/theme';
-import { exportOrdersListToPdf } from '@/lib/exportPdf';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 
 type OrderRow = {
@@ -20,9 +19,9 @@ type OrderRow = {
   order_date: string;
   mileage: number | null;
   status: string;
-  clients: { name: string; phone: string | null };
+  clients: { name: string };
   vehicles: { plate: string; brand: string; model: string; year: number | null };
-  order_items: { item_type: 'servico' | 'peca'; description: string; price: number }[];
+  order_items: { price: number }[];
 };
 
 export default function OrdersScreen() {
@@ -39,7 +38,7 @@ export default function OrdersScreen() {
       setError(null);
       const { data, error } = await supabase
         .from('service_orders')
-        .select('id, order_date, mileage, status, clients(name, phone), vehicles(plate, brand, model, year), order_items(item_type, description, price)')
+        .select('id, order_date, mileage, status, clients(name), vehicles(plate, brand, model, year), order_items(price)')
         .order('order_date', { ascending: false });
       if (error) throw error;
       setOrders((data ?? []) as unknown as OrderRow[]);
@@ -71,18 +70,10 @@ export default function OrdersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Ordens de Serviço</Text>
-        <View style={styles.headerActions}>
-          {orders.some((o) => o.status === 'fechada') && (
-            <Pressable style={styles.exportButton} onPress={() => exportOrdersListToPdf(orders.filter((o) => o.status === 'fechada'))}>
-              <FileDown size={18} color={theme.primary} strokeWidth={2} />
-              <Text style={styles.exportButtonText}>PDF</Text>
-            </Pressable>
-          )}
-          <Pressable style={styles.addButton} onPress={() => router.push('/(tabs)/orders/new')}>
-            <Plus size={20} color={theme.white} strokeWidth={2.5} />
-            <Text style={styles.addButtonText}>Nova</Text>
-          </Pressable>
-        </View>
+        <Pressable style={styles.addButton} onPress={() => router.push('/(tabs)/orders/new')}>
+          <Plus size={20} color={theme.white} strokeWidth={2.5} />
+          <Text style={styles.addButtonText}>Nova</Text>
+        </Pressable>
       </View>
 
       <View style={styles.searchContainer}>
@@ -182,19 +173,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addButtonText: { color: theme.white, fontSize: 14, fontWeight: '600' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.surface,
-    borderWidth: 1,
-    borderColor: theme.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
-  },
-  exportButtonText: { color: theme.primary, fontSize: 14, fontWeight: '600' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
